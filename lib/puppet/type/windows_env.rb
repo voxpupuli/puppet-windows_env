@@ -93,6 +93,12 @@ Puppet::Type.newtype(:windows_env) do
     defaultto(100)
   end
 
+  newparam(:update_ruby_env) do
+    desc "Update ruby's environment to include the new or changed environment variable."
+    newvalues(:true, :false)
+    defaultto(:true)
+  end
+
   newproperty(:type) do
     desc "What type of registry key to use for the variable. Determines whether interpolation of '%' enclosed names will occur"
     newvalues(:REG_SZ, :REG_EXPAND_SZ)

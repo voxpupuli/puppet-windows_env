@@ -129,6 +129,12 @@ that initiated the puppet run; if puppet runs in the background, updates to the
 environment will not propagate to logged in users until they log out and back in
 or refresh their environment by some other means. 
 
+#### `update_ruby_env`
+Valid values are `true` and `false`. Default is `true`. This will update the ruby
+process's environment in addition to setting the variable in the registry.
+This means that other puppet resources that read the environment variable
+should immediately see the change.
+
 ### Examples
 
 ```puppet

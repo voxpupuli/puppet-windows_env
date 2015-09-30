@@ -197,7 +197,11 @@ Puppet::Type.type(:windows_env).provide(:windows_env) do
       @reg_type = Win32::Registry::REG_SZ unless @reg_type
       begin
         @reg_hive.create(@reg_path, Win32::Registry::KEY_ALL_ACCESS | Win32::Registry::KEY_WOW64_64KEY) do |key| 
-          key[@resource[:variable], @reg_type] = @resource[:value].join(@sep) 
+          val = @resource[:value].join(@sep)
+          key[@resource[:variable], @reg_type] = val
+          if @resource[:update_ruby_env] == :true
+            ENV[@resource[:variable]] = val
+          end
         end
       rescue Win32::Registry::Error => error
         reg_fail('creating', error)
@@ -222,7 +226,13 @@ Puppet::Type.type(:windows_env).provide(:windows_env) do
     debug "Removing value from environment variable '#{@resource[:variable]}', or removing variable itself"
     case @resource[:mergemode]
     when :clobber
-      key_write { |key| self.class::WinAPI.delete_value(key, @resource[:variable]) }
+      key_write do |key|
+        self.class::WinAPI.delete_value(key, @resource[:variable])
+        # XXX: you cannot pass UTF-16LE strings to ENV.delete or ENV[]
+        if @resource[:update_ruby_env] == :true
+          ENV[@resource[:variable].encode("UTF-8")] = nil
+        end
+      end
     when :insert, :append, :prepend
       remove_value
       key_write
@@ -282,7 +292,13 @@ Puppet::Type.type(:windows_env).provide(:windows_env) do
       else
         newtype = @reg_types[self.type]
       end
-        block = proc { |key| key[@resource[:variable], newtype] = @value.join(@sep) }
+        block = proc do |key|
+          val = @value.join(@sep)
+          key[@resource[:variable], newtype] = val
+          if @resource[:update_ruby_env] == :true
+            ENV[@resource[:variable]] = val
+          end
+        end
     end
     @reg_hive.open(@reg_path, Win32::Registry::KEY_WRITE | Win32::Registry::KEY_WOW64_64KEY, &block) 
   rescue Win32::Registry::Error => error
@@ -293,6 +309,9 @@ Puppet::Type.type(:windows_env).provide(:windows_env) do
   # for debugging (i.e. with 'puppet agent -t') since you can only broadcast messages to your own
   # windows, and not to those of other users. 
   # see: http://stackoverflow.com/questions/190168/persisting-an-environment-variable-through-ruby/190437#190437
+  #
+  # Note also that we update ruby's ENV variable (unless update_ruby_env is
+  # false), so the Puppet process will know about the change right away.
   def broadcast_changes
     debug "Broadcasting changes to environment"
     _HWND_BROADCAST = 0xFFFF
