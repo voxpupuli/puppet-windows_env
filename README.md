@@ -105,6 +105,9 @@ Valid values:
 The type of registry value to use. Default is `undef` for existing keys (i.e.
 don't change the type) and `REG_SZ` when creating new keys. 
 
+Note that, in the "future parser" (default in puppet 4), you must quote the
+value of this parameter, since capitalized bare words now refer to a Type.
+
 Valid values:
 
 - `REG_SZ`
@@ -156,10 +159,10 @@ or refresh their environment by some other means.
       mergemode => clobber,
     }
 
-    # Variables with 'type => REG_EXPAND_SZ' allow other environment variables to be used
+    # Variables with 'type => "REG_EXPAND_SZ"' allow other environment variables to be used
     # by enclosing them in percent symbols. 
     windows_env { 'JAVA_HOME=%ProgramFiles%\Java\jdk1.6.0_02':
-      type => REG_EXPAND_SZ,
+      type => 'REG_EXPAND_SZ',
     }
 
     # Create an environment variable for 'Administrator':
