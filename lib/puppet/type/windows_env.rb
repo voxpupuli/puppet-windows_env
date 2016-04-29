@@ -23,7 +23,7 @@ Puppet::Type.newtype(:windows_env) do
       @type[user] ||= {}
       last = @type[user][var]
       if last && last[:type] != resource[:type]
-        fail "Multiple resources are managing the same environment variable but their types do not agree (Offending resources: #{resource}, #{last})"
+        fail "Multiple resources are managing the same environment variable but their 'type' parameters do not agree (Offending resources: #{resource}, #{last})"
       else
         @type[user][var] = resource
       end
