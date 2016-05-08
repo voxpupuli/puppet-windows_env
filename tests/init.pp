@@ -93,5 +93,16 @@ class windows_env {
     user   => 'Administrator',
     ensure => absent,
   }
+
+  # Should set environment variable 'X' in the registry *and* in the ruby
+  # process' environment, such that the exec sees the new value of X.
+  windows_env { "X=12":
+    mergemode       => clobber,
+    update_ruby_env => true,
+  }->
+  exec { 'cmd.exe /c echo %X%':
+    logoutput => true,
+    path      => $::path,
+  }
 }
 
