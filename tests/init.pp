@@ -16,6 +16,19 @@ class windows_env {
     user  => 'jibberishuserwhoshouldnotexist',
   }
 
+  # Two resources managing the same variable, both in clobber mergemode not allowed.
+  windows_env { 'DELETEME1':
+    mergemode => clobber,
+    ensure    => present,
+    value     => '',
+    variable  => 'DELETEME',
+  }->
+  windows_env { 'DELETEME2':
+    mergemode => clobber,
+    ensure    => absent,
+    variable  => 'DELETEME',
+  }
+
   ### SHOULD PASS ###
 
   # Should insert 'C:\foo' at end of PATH
@@ -61,19 +74,6 @@ class windows_env {
   windows_env { 'VARGUY=C:\hello': }->
   windows_env { 'VARGUY=C:\byebye':
     type => REG_EXPAND_SZ,
-  }
-
-  # Should create a variable 'DELETME', and then delete it. 
-  windows_env { 'DELETEME1':
-    mergemode => clobber,
-    ensure    => present,
-    value     => '',
-    variable  => 'DELETEME',
-  }->
-  windows_env { 'DELETEME2':
-    mergemode => clobber,
-    ensure    => absent,
-    variable  => 'DELETEME',
   }
 
   # Should remove 'C:\path' from PATH. 

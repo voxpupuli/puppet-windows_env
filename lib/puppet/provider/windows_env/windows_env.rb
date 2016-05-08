@@ -61,13 +61,15 @@ Puppet::Type.type(:windows_env).provide(:windows_env) do
       attach_function :RegUnLoadKey, :RegUnLoadKeyA, [:uintptr_t, :pointer], :long
 
       # Ruby < 1.9 doesn't know about encoding.
-      if defined?(::Encoding)
+      if defined?(::Encoding) && defined?(Puppet::Util::Windows::String)
         # Workaround for https://bugs.ruby-lang.org/issues/10820 .
         attach_function :RegDeleteValue, :RegDeleteValueW, [:uintptr_t, :buffer_in], :long
 
         # Borrowed from Puppet core. Duplicated for old version compatibilty.
         def self.from_string_to_wide_string(str, &block)
-          str.encode!(Encoding::UTF_16LE)
+          # TODO:
+          # Puppet::Util::Windows::String is new in Puppet 3.4.3.
+          str = Puppet::Util::Windows::String.wide_string(str)
           FFI::MemoryPointer.new(:byte, str.bytesize) do |ptr|
             # uchar here is synonymous with byte
             ptr.put_array_of_uchar(0, str.bytes.to_a)
@@ -128,7 +130,7 @@ Puppet::Type.type(:windows_env).provide(:windows_env) do
     # this would probably not be what the user wants (since it'll trigger
     # subscribed resources and such even when the registry was already
     # correct). So instead, just update the environment quietly.
-    if @resource[:update_ruby_env]
+    if @resource[:update_ruby_env] == :true
       exists_current_env = exists_helper(ENV[@resource[:variable]])
       if (@resource[:ensure] == :present && ! exists_current_env) ||
          (@resource[:ensure] == :absent && exists_current_env)
@@ -138,20 +140,19 @@ Puppet::Type.type(:windows_env).provide(:windows_env) do
       end
     end
 
-    exists_helper(@value)
+    # TODO remove
+    debug "@value = '#{@value}'"
+    exists = exists_helper(@value)
+    debug "Returning exists == #{exists}"
+    exists
   end
 
   def create
     debug "Creating or inserting value into environment variable '#{@resource[:variable]}'"
 
-    # If the registry item doesn't exist yet, creation is always treated like
-    # clobber mode, i.e. create the new reg item and populate it with
-    # @resource[:value]
-    if not @value
-      @resource[:mergemode] = :clobber
-    end
-
     desired_value = get_desired_value(@value)
+    # TODO: remove
+    debug "#create: desired_value == '#{desired_value}'"
 
     # Creating a new key or updating an old?
     if @value.nil?
@@ -175,10 +176,13 @@ Puppet::Type.type(:windows_env).provide(:windows_env) do
     debug "Removing value from environment variable '#{@resource[:variable]}', or removing variable itself"
 
     @value = get_desired_value(@value)
+    # TODO: remove
+    debug "@value = get_desried_value(@value) == '#{@value.to_s}'"
+    debug "@value.class == #{@value.class}"
     if @value.nil?
-      key_write do |key|
-        self.class::WinAPI.delete_value(key, @resource[:variable])
-      end
+      # TODO: remove
+      debug "@value nil, deleting variable"
+      key_write { |key| self.class::WinAPI.delete_value(key, @resource[:variable]) }
     else
       key_write
     end
@@ -234,19 +238,16 @@ Puppet::Type.type(:windows_env).provide(:windows_env) do
   # ruby process' environment.
   # current_value may be nil if the variable doesn't exist.
   def exists_helper(current_value)
-    current_value = current_value.nil? ? nil : current_value.split(@resource[:separator])
+    # No variable; definitely doesn't exist.
+    return false if current_value.nil?
+
+    current_value = current_value.split(@resource[:separator])
 
     case @resource[:mergemode]
     when :clobber
-      # When 'ensure == absent' in clobber mode, we delete the variable itself, regardless of its content, so
-      # don't bother checking the content in this case, just whether the variable exists or not.
-      if @resource[:ensure] == :absent
-        current_value.nil?
-      else
-        # TODO: remove
-        debug "current_value = '#{current_value}' @resource[:value] == '#{@resource[:value]}'"
-        current_value == @resource[:value]
-      end
+      # TODO: remove
+      debug "current_value = '#{current_value}' @resource[:value] == '#{@resource[:value]}'"
+      current_value == @resource[:value]
     when :insert
       # FIXME: this is a weird way to do this
       # verify all elements are present and they appear in the correct order
@@ -310,7 +311,7 @@ Puppet::Type.type(:windows_env).provide(:windows_env) do
   # Get the desired value of the environment variable. If
   # the variable is to be deleted, return nil.
   def get_desired_value(current_value)
-    current_value = current_value.nil? ? nil : current_value.split(@resource[:separator])
+    current_value = current_value.nil? ? [] : current_value.split(@resource[:separator])
 
     if @resource[:ensure] == :present
       case @resource[:mergemode]
@@ -325,13 +326,12 @@ Puppet::Type.type(:windows_env).provide(:windows_env) do
       when :prepend
         # delete if already in the string and move to front
         val = remove_value(current_value)
-        @resource[:value].concat(val)
+        val = @resource[:value].concat(val)
       end
     else
-      case @resource[:mergemode]
-      when :clobber
+      if @resource[:mergemode] == :clobber
         val = nil
-      when :insert, :append, :prepend
+      else
         val = remove_value(current_value)
       end
     end
