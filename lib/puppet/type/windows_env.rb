@@ -96,7 +96,7 @@ Puppet::Type.newtype(:windows_env) do
   newparam(:update_ruby_env) do
     desc "Update ruby's environment to include the new or changed environment variable."
     newvalues(:true, :false)
-    defaultto(:true)
+    defaultto(:false)
   end
 
   newproperty(:type) do
