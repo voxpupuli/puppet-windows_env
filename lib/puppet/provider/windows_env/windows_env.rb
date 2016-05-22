@@ -113,7 +113,7 @@ Puppet::Type.type(:windows_env).provide(:windows_env) do
   end
 
   def exists?
-    @value = get_current_reg_val()
+    @reg_value = get_current_reg_val()
 
     # Assume that if the user says 'ensure => absent', they want the value to
     # be removed regardless of its position, i.e. use the 'insert' behavior
@@ -140,22 +140,16 @@ Puppet::Type.type(:windows_env).provide(:windows_env) do
       end
     end
 
-    # TODO remove
-    debug "@value = '#{@value}'"
-    exists = exists_helper(@value)
-    debug "Returning exists == #{exists}"
-    exists
+    exists_helper(@reg_value)
   end
 
   def create
     debug "Creating or inserting value into environment variable '#{@resource[:variable]}'"
 
-    desired_value = get_desired_value(@value)
-    # TODO: remove
-    debug "#create: desired_value == '#{desired_value}'"
+    desired_value = get_desired_value(@reg_value)
 
     # Creating a new key or updating an old?
-    if @value.nil?
+    if @reg_value.nil?
       @reg_type = Win32::Registry::REG_SZ unless @reg_type
       begin
         @reg_hive.create(@reg_path, Win32::Registry::KEY_ALL_ACCESS | Win32::Registry::KEY_WOW64_64KEY) do |key| 
@@ -165,7 +159,7 @@ Puppet::Type.type(:windows_env).provide(:windows_env) do
         reg_fail('creating', error)
       end
     else
-      @value = desired_value
+      @reg_value = desired_value
       key_write
     end
 
@@ -175,13 +169,8 @@ Puppet::Type.type(:windows_env).provide(:windows_env) do
   def destroy
     debug "Removing value from environment variable '#{@resource[:variable]}', or removing variable itself"
 
-    @value = get_desired_value(@value)
-    # TODO: remove
-    debug "@value = get_desried_value(@value) == '#{@value.to_s}'"
-    debug "@value.class == #{@value.class}"
-    if @value.nil?
-      # TODO: remove
-      debug "@value nil, deleting variable"
+    @reg_value = get_desired_value(@reg_value)
+    if @reg_value.nil?
       key_write { |key| self.class::WinAPI.delete_value(key, @resource[:variable]) }
     else
       key_write
@@ -198,11 +187,13 @@ Puppet::Type.type(:windows_env).provide(:windows_env) do
 
   def type=(newtype)
     newtype = @reg_types[newtype]
-    key_write { |key| key[@resource[:variable], newtype] = @value }
+    key_write { |key| key[@resource[:variable], newtype] = @reg_value }
     broadcast_changes
   end
 
+  ################################################
   private
+  ################################################
 
   # name_to_sid moved from 'security' to 'sid' in Puppet 3.7.
   # 'puppet/util/windows/sid' is not guaranteed to exist on older 3.x Puppets.
@@ -245,8 +236,6 @@ Puppet::Type.type(:windows_env).provide(:windows_env) do
 
     case @resource[:mergemode]
     when :clobber
-      # TODO: remove
-      debug "current_value = '#{current_value}' @resource[:value] == '#{@resource[:value]}'"
       current_value == @resource[:value]
     when :insert
       # FIXME: this is a weird way to do this
@@ -316,17 +305,17 @@ Puppet::Type.type(:windows_env).provide(:windows_env) do
     if @resource[:ensure] == :present
       case @resource[:mergemode]
       when :clobber
-        val = [@resource[:value]]
+        val = @resource[:value]
       # the position at which the new value will be inserted when using insert is
       # arbitrary, so may as well group it with append.
       when :insert, :append
         # delete if already in the string and move to end.
         val = remove_value(current_value)
-        val = val.concat(@resource[:value])
+        val = val + @resource[:value]
       when :prepend
         # delete if already in the string and move to front
         val = remove_value(current_value)
-        val = @resource[:value].concat(val)
+        val = @resource[:value] + val
       end
     else
       if @resource[:mergemode] == :clobber
@@ -349,7 +338,7 @@ Puppet::Type.type(:windows_env).provide(:windows_env) do
       else
         newtype = @reg_types[self.type]
       end
-      block = proc { |key| key[@resource[:variable], newtype] = @value }
+      block = proc { |key| key[@resource[:variable], newtype] = @reg_value }
     end
     @reg_hive.open(@reg_path, Win32::Registry::KEY_WRITE | Win32::Registry::KEY_WOW64_64KEY, &block) 
   rescue Win32::Registry::Error => error
