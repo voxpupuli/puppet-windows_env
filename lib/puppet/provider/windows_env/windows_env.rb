@@ -249,21 +249,23 @@ Puppet::Type.type(:windows_env).provide(:windows_env) do
   # name_to_sid moved from 'security' to 'sid' in Puppet 3.7.
   # 'puppet/util/windows/sid' is not guaranteed to exist on older 3.x Puppets.
   use_util_windows_sid = false
-  begin
-    require 'puppet/util/windows/sid'
-    if Puppet::Util::Windows::SID.respond_to?(:name_to_sid)
-      use_util_windows_sid = true
+  if Puppet.features.microsoft_windows?
+    begin
+      require 'puppet/util/windows/sid'
+      if Puppet::Util::Windows::SID.respond_to?(:name_to_sid)
+        use_util_windows_sid = true
+      end
+    rescue LoadError
+      use_util_windows_sid = false
     end
-  rescue LoadError
-    use_util_windows_sid = false
-  end
-  if use_util_windows_sid
-    def name_to_sid(name)
-      Puppet::Util::Windows::SID.name_to_sid(name)
-    end
-  else
-    def name_to_sid(name)
-      Puppet::Util::Windows::Security.name_to_sid(name)
+    if use_util_windows_sid
+      def name_to_sid(name)
+        Puppet::Util::Windows::SID.name_to_sid(name)
+      end
+    else
+      def name_to_sid(name)
+        Puppet::Util::Windows::Security.name_to_sid(name)
+      end
     end
   end
 
